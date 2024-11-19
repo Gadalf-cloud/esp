@@ -1,0 +1,102 @@
+local DepthMode = "AlwaysOnTop"
+local FillTransparency = 0.5
+local OutlineTransparency = 0
+
+local CoreGui = game:FindService("CoreGui")
+local Players = game:FindService("Players")
+local lp = Players.LocalPlayer
+local connections = {}
+
+local Storage = Instance.new("Folder")
+Storage.Parent = CoreGui
+Storage.Name = "Highlight_Storage"
+
+local function GetTeamColors(plr)
+    if plr.Team == lp.Team then
+        return Color3.fromRGB(0, 255, 0), Color3.fromRGB(0, 255, 0) -- Verbündete = grün
+    else
+        return Color3.fromRGB(255, 0, 0), Color3.fromRGB(255, 0, 0) -- Feinde = rot
+    end
+end
+
+local function CreateHighlightForPlayer(plr)
+    local Highlight = Instance.new("Highlight")
+    Highlight.Name = plr.Name
+    Highlight.DepthMode = DepthMode
+    Highlight.FillTransparency = FillTransparency
+    Highlight.OutlineTransparency = OutlineTransparency
+    Highlight.Parent = Storage
+    
+    local FillColor, OutlineColor = GetTeamColors(plr)
+    Highlight.FillColor = FillColor
+    Highlight.OutlineColor = OutlineColor
+    
+    local plrchar = plr.Character
+    if plrchar then
+        Highlight.Adornee = plrchar
+    end
+
+    connections[plr] = plr.CharacterAdded:Connect(function(char)
+        Highlight.Adornee = char
+    end)
+
+    -- Erstellen des Namens-Tags, das über dem Kopf schwebt
+    local nameTag = Instance.new("BillboardGui")
+    nameTag.Size = UDim2.new(0, 200, 0, 50)
+    nameTag.Adornee = plr.Character:WaitForChild("Head")
+    nameTag.Parent = plr.Character:WaitForChild("Head")
+    nameTag.AlwaysOnTop = true
+    nameTag.StudsOffset = Vector3.new(0, 2, 0)  -- Verschiebt den Namen 2 Studs über den Kopf des Spielers
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(1, 0, 1, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = plr.Name
+    nameLabel.TextColor3 = FillColor -- Name hat die gleiche Farbe wie das Highlight
+    nameLabel.TextStrokeTransparency = 0.8
+    nameLabel.TextSize = 20
+    nameLabel.Parent = nameTag
+
+    local function UpdateNameTagVisibility()
+        local distance = (plr.Character.Head.Position - lp.Character.Head.Position).magnitude
+        if distance < 15 then
+            nameTag.Enabled = false
+        else
+            nameTag.Enabled = true
+        end
+
+        -- Verkleinert den Namen je näher man kommt
+        local newSize = math.clamp(20 - (distance / 10), 10, 20) -- Min. Schriftgröße: 10, Max. Schriftgröße: 20
+        nameLabel.TextSize = newSize
+    end
+
+    game:GetService("RunService").Heartbeat:Connect(UpdateNameTagVisibility)
+
+    plr:GetPropertyChangedSignal("Team"):Connect(function()
+        local NewFillColor, NewOutlineColor = GetTeamColors(plr)
+        Highlight.FillColor = NewFillColor
+        Highlight.OutlineColor = NewOutlineColor
+        nameLabel.TextColor3 = NewFillColor -- Namefarbe ändern, wenn sich das Team ändert
+    end)
+end
+
+-- Erstelle Highlights für alle aktuellen Spieler
+for _, plr in ipairs(Players:GetPlayers()) do
+    CreateHighlightForPlayer(plr)
+end
+
+-- Erstelle Highlights für Spieler, die neu beitreten
+Players.PlayerAdded:Connect(function(plr)
+    CreateHighlightForPlayer(plr)
+end)
+
+-- Entferne Highlights, wenn Spieler das Spiel verlassen
+Players.PlayerRemoving:Connect(function(plr)
+    local plrname = plr.Name
+    if Storage[plrname] then
+        Storage[plrname]:Destroy()
+    end
+    if connections[plr] then
+        connections[plr]:Disconnect()
+    end
+end)
